@@ -23,8 +23,7 @@ button.g{background:#3a3a3c}
 #time{font-size:96px;font-weight:700;letter-spacing:-2px;line-height:1.05}
 #black{position:fixed;inset:0;background:#000;z-index:4;transition:opacity .35s}
 #black.off{opacity:0;pointer-events:none}
-#dot{position:fixed;top:calc(env(safe-area-inset-top,0px) + 8px);right:12px;width:6px;height:6px;border-radius:50%;background:#fff;opacity:0;z-index:5;pointer-events:none}
-#dot.on{opacity:.1}
+#dot{position:fixed;top:calc(env(safe-area-inset-top,0px) + 10px);right:14px;width:8px;height:8px;border-radius:50%;background:#555;opacity:.7;z-index:5;pointer-events:none;transition:background .15s}
 #cfg{position:fixed;inset:0;display:none;z-index:8;background:#111;overflow-y:auto;padding:calc(env(safe-area-inset-top,0px) + 18px) 18px 40px;-webkit-user-select:text;user-select:text}
 #cfg h2{margin:0 0 14px;font-size:20px}
 #cfg h3{margin:22px 0 8px;font-size:14px;color:#8e8e93;text-transform:uppercase;letter-spacing:.5px}
@@ -52,11 +51,15 @@ small{color:#8e8e93;font-size:12px;display:block;margin-top:4px}
 <div id="cfg">
   <h2>Configuración</h2>
 
+  <h3>Puntito de estado (arriba a la derecha)</h3>
+  <small style="font-size:14px;line-height:1.6">
+  ⚫ gris: escuchando<br>🟡 amarillo: oí el minuto del espectador<br>🟢 verde: oí tu palabra clave, adelanto listo<br>🔴 rojo: oí tu palabra pero aún no hay minuto<br>🔵 azul: oí la palabra de retroceder<br>⬛ casi negro: micrófono apagado</small>
+
   <h3>Palabras clave (tuyas)</h3>
-  <input id="armk" type="text" placeholder="Palabra para ADELANTAR la hora" autocapitalize="off">
-  <small>Al decirla, se toma el número que dijo el espectador y la hora queda adelantada esos minutos. Al tocar la pantalla negra aparece la hora ya adelantada.</small>
-  <input id="rstk" type="text" placeholder="Palabra para RETROCEDER a la hora real" autocapitalize="off" style="margin-top:10px">
-  <small>Al decirla, el reloj retrocede esos minutos y queda en la hora exacta.</small>
+  <input id="armk" type="text" placeholder="Palabra(s) para ADELANTAR la hora" autocapitalize="off">
+  <small>Puedes poner varias separadas por coma (ej: observa, mira). Al oírla, el puntito se pone verde. Funciona aunque la digas antes o después del número.</small>
+  <input id="rstk" type="text" placeholder="Palabra(s) para RETROCEDER a la hora real" autocapitalize="off" style="margin-top:10px">
+  <small>Al oírla con el reloj visible, retrocede esos minutos hasta la hora exacta.</small>
 
   <h3>Palabras para cada número</h3>
   <div class="nums" id="nums"></div>
@@ -77,6 +80,8 @@ small{color:#8e8e93;font-size:12px;display:block;margin-top:4px}
   <h3>Clave de acceso</h3>
   <input id="npw" type="password" placeholder="Nueva clave (vacío = no cambiar)" autocomplete="off">
 
+  <h3>Estado de la voz</h3>
+  <small id="stat" style="font-size:14px"></small>
   <div class="btns"><button class="g" id="mic">Reiniciar micrófono</button></div>
   <div class="btns"><button class="g" id="close">Cancelar</button><button id="save">Guardar</button></div>
 </div>
@@ -86,7 +91,7 @@ const $=id=>document.getElementById(id);
 const DEF={size:96,top:12,color:'#ffffff',h24:false,showdate:true,armk:'observa',rstk:'perfecto',
  words:['uno,una','dos','tres','cuatro','cinco','seis','siete','ocho','nueve','diez']};
 let cfg=Object.assign({},DEF), offset=0, rec=null, listening=false, busy=false;
-let lastNum=0, armed=0, isBlack=true;   // offset negativo = hora adelantada
+let lastNum=0, armed=0, pending=false, isBlack=true, revealedAt=0, heard='', flash='', flashT;
 
 function load(k){try{return localStorage.getItem(k)}catch(e){return window['_'+k]}}
 function store(k,v){try{localStorage.setItem(k,v)}catch(e){window['_'+k]=v}}
@@ -102,6 +107,19 @@ function apply(){
   tick();
 }
 
+// ---- Puntito de estado ----
+function setDot(){
+  let c='#666';
+  if(!listening)c='#1c1c1e';
+  else if(flash)c=flash;
+  else if(armed)c='#30d158';        // verde
+  else if(pending)c='#ff453a';      // rojo
+  else if(lastNum&&isBlack)c='#ffd60a'; // amarillo
+  $('dot').style.background=c;
+}
+function flashDot(c,ms){flash=c;setDot();clearTimeout(flashT);flashT=setTimeout(()=>{flash='';setDot()},ms)}
+setInterval(setDot,400);
+
 // ---- Login ----
 if(!load('rm_key')){$('lt').textContent='Crear clave';$('lp').textContent='Elige tu clave de acceso';$('go').textContent='Guardar'}
 $('go').onclick=()=>{
@@ -110,6 +128,7 @@ $('go').onclick=()=>{
   if(!load('rm_key')){store('rm_key',v);enter();return}
   if(v===load('rm_key'))enter(); else{$('err').textContent='Clave incorrecta';$('pw').value=''}
 };
+$('pw').addEventListener('keydown',e=>{if(e.key==='Enter')$('go').click()});
 function enter(){
   $('login').style.display='none';$('screen').style.display='block';
   $('black').className='';isBlack=true;apply();startVoice();
@@ -124,7 +143,7 @@ function tick(){
 }
 setInterval(tick,500);
 function rewind(){
-  if(busy||offset>=0)return; busy=true;
+  if(busy||offset>=0)return; busy=true;revealedAt=0;
   const start=offset,dur=Math.min(1500+(-start/60000)*500,6000),t0=performance.now();
   (function step(now){
     const p=Math.min((now-t0)/dur,1),e=1-Math.pow(1-p,3);
@@ -134,8 +153,21 @@ function rewind(){
 }
 
 // ---- Voz ----
-const norm=s=>s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
+const norm=s=>s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9ñ ]/g,' ').replace(/\s+/g,' ').trim();
 const esc=s=>s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+function lev(a,b){const m=[];for(let i=0;i<=a.length;i++){m[i]=[i]}for(let j=0;j<=b.length;j++)m[0][j]=j;
+  for(let i=1;i<=a.length;i++)for(let j=1;j<=b.length;j++)m[i][j]=Math.min(m[i-1][j]+1,m[i][j-1]+1,m[i-1][j-1]+(a[i-1]===b[j-1]?0:1));
+  return m[a.length][b.length]}
+// ¿Aparece alguna de las palabras clave? Tolera pequeños errores de reconocimiento.
+function hasKey(t,keys){
+  const words=t.split(' ');
+  return (keys||'').split(',').map(norm).filter(Boolean).some(k=>{
+    if(t.includes(k))return true;
+    if(k.includes(' '))return false;
+    const tol=k.length>=7?2:k.length>=4?1:0;
+    return tol>0&&words.some(w=>Math.abs(w.length-k.length)<=tol&&lev(w,k)<=tol);
+  });
+}
 function parseNum(t){
   let best=null,bi=-1;
   const test=(re,n)=>{let m,r=new RegExp(re,'g');while((m=r.exec(t))){if(m.index>=bi){bi=m.index;best=n}}};
@@ -146,36 +178,54 @@ function parseNum(t){
   return best;
 }
 function handle(raw){
+  heard=raw;
   const t=norm(raw);
-  const n=parseNum(t); if(n)lastNum=n;
-  const a=norm(cfg.armk),r=norm(cfg.rstk);
-  if(isBlack&&a&&t.includes(a)&&lastNum)armed=lastNum;           // adelantar (queda listo bajo la pantalla negra)
-  if(r&&t.includes(r)){ if(isBlack){armed=0;lastNum=0} else rewind(); } // retroceder a la hora real
+  const isArm=hasKey(t,cfg.armk), isRst=hasKey(t,cfg.rstk);
+  const n=isArm||isRst?parseNum(t.replace(/\s+/g,' ')):parseNum(t);
+  if(n&&!isRst){
+    lastNum=n;
+    if(pending&&isBlack){armed=n;pending=false}              // la palabra llegó antes que el número
+  }
+  if(isArm&&isBlack){
+    if(lastNum){armed=lastNum;pending=false}                 // 🟢 adelanto listo
+    else pending=true;                                       // 🔴 sin minuto todavía
+  } else if(isArm&&!isBlack&&lastNum&&revealedAt&&Date.now()-revealedAt<4000&&offset===0&&!busy){
+    offset=-lastNum*60000;                                   // la palabra llegó tarde
+  }
+  if(isRst&&!isArm){
+    if(isBlack){armed=0;pending=false;lastNum=0}
+    else if(offset<0){rewind();flashDot('#0a84ff',1800)}      // 🔵
+  }
+  setDot();
 }
 function startVoice(){
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   if(!SR){alert('Este navegador no soporta voz. Usa Safari o Chrome.');return}
-  try{rec&&(listening=false,rec.stop())}catch(e){}
+  try{if(rec){listening=false;rec.onend=null;rec.stop()}}catch(e){}
   rec=new SR();rec.lang='es-ES';rec.continuous=true;rec.interimResults=true;
   rec.onresult=e=>{for(let i=e.resultIndex;i<e.results.length;i++)handle(e.results[i][0].transcript)};
-  rec.onend=()=>{if(listening){try{rec.start()}catch(e){}}};
-  listening=true;try{rec.start()}catch(e){}$('dot').classList.add('on');
+  rec.onerror=e=>{if(e.error==='not-allowed'||e.error==='service-not-allowed'){listening=false;setDot();alert('Permite el micrófono para esta página en los ajustes de Safari.')}};
+  rec.onend=()=>{if(listening)setTimeout(()=>{try{rec.start()}catch(e){}},250)};
+  listening=true;try{rec.start()}catch(e){}setDot();
 }
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&$('login').style.display==='none')startVoice()});
 
 // ---- Toques ----
 let hold,lastTap=0;
 function reveal(){
   if(!isBlack)return;
-  offset=armed?-armed*60000:0;      // hora adelantada
-  tick();isBlack=false;$('black').className='off';
+  const m=armed||lastNum;                  // si falló la palabra, usa el último minuto oído
+  offset=m?-m*60000:0;                     // hora adelantada
+  revealedAt=Date.now();pending=false;
+  tick();isBlack=false;$('black').className='off';setDot();
 }
 function toBlack(){
-  offset=0;armed=0;lastNum=0;isBlack=true;busy=false;$('black').className='';
+  offset=0;armed=0;lastNum=0;pending=false;isBlack=true;busy=false;$('black').className='';setDot();
 }
 $('black').addEventListener('click',reveal);
 $('screen').addEventListener('click',()=>{
   const n=Date.now();
-  if(n-lastTap<350){lastTap=0;toBlack()}else lastTap=n;   // doble toque en el reloj: volver a pantalla negra
+  if(n-lastTap<350){lastTap=0;toBlack()}else lastTap=n;   // doble toque en el reloj: volver a negro
 });
 function startHold(){hold=setTimeout(openCfg,1500)}
 ['black','screen'].forEach(id=>{
@@ -194,6 +244,7 @@ function openCfg(){
   for(let i=1;i<=10;i++)$('w'+i).value=cfg.words[i-1]||'';
   $('npw').value='';$('cfg').style.display='block';
 }
+setInterval(()=>{const s=$('stat');if(s)s.textContent='Micrófono: '+(listening?'encendido':'apagado')+' · Última frase: "'+heard+'" · Minuto detectado: '+(lastNum||'ninguno')+' · Adelanto listo: '+(armed||'no')},500);
 ['size','top','color'].forEach(id=>$(id).addEventListener('input',()=>{
   cfg.size=+$('size').value;cfg.top=+$('top').value;cfg.color=$('color').value;apply()}));
 $('img').onchange=e=>{
