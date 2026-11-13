@@ -9,10 +9,10 @@
 :root{color-scheme:dark}
 *{box-sizing:border-box}
 html,body{height:100%;margin:0;background:#000;font-family:-apple-system,"SF Pro Display",Helvetica,Arial,sans-serif;color:#fff;overflow:hidden;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
-#login{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:#111;z-index:5;padding:24px;text-align:center}
+#login{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:#111;z-index:9;padding:24px;text-align:center}
 #login h1{font-size:22px;margin:0}
 #login p{margin:0;color:#aaa;font-size:14px}
-input[type=password],input[type=text],input[type=number]{font-size:17px;padding:10px 12px;border-radius:10px;border:0;background:#2a2a2c;color:#fff;width:100%}
+input[type=password],input[type=text]{font-size:17px;padding:10px 12px;border-radius:10px;border:0;background:#2a2a2c;color:#fff;width:100%}
 #pw{width:200px;text-align:center;font-size:20px}
 button{font-size:16px;padding:11px 24px;border:0;border-radius:12px;background:#0a84ff;color:#fff}
 button.g{background:#3a3a3c}
@@ -21,9 +21,11 @@ button.g{background:#3a3a3c}
 #clock{position:absolute;left:0;right:0;top:12%}
 #date{font-size:20px;font-weight:600;opacity:.92;text-transform:capitalize}
 #time{font-size:96px;font-weight:700;letter-spacing:-2px;line-height:1.05}
-#dot{position:absolute;top:calc(env(safe-area-inset-top,0px) + 8px);right:12px;width:6px;height:6px;border-radius:50%;background:#fff;opacity:0}
-#dot.on{opacity:.12}
-#cfg{position:fixed;inset:0;display:none;z-index:6;background:#111;overflow-y:auto;padding:calc(env(safe-area-inset-top,0px) + 18px) 18px 40px;-webkit-user-select:text;user-select:text}
+#black{position:fixed;inset:0;background:#000;z-index:4;transition:opacity .35s}
+#black.off{opacity:0;pointer-events:none}
+#dot{position:fixed;top:calc(env(safe-area-inset-top,0px) + 8px);right:12px;width:6px;height:6px;border-radius:50%;background:#fff;opacity:0;z-index:5;pointer-events:none}
+#dot.on{opacity:.1}
+#cfg{position:fixed;inset:0;display:none;z-index:8;background:#111;overflow-y:auto;padding:calc(env(safe-area-inset-top,0px) + 18px) 18px 40px;-webkit-user-select:text;user-select:text}
 #cfg h2{margin:0 0 14px;font-size:20px}
 #cfg h3{margin:22px 0 8px;font-size:14px;color:#8e8e93;text-transform:uppercase;letter-spacing:.5px}
 .row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:8px 0;font-size:15px}
@@ -43,17 +45,26 @@ small{color:#8e8e93;font-size:12px;display:block;margin-top:4px}
   <button id="go">Entrar</button>
 </div>
 
-<div id="screen">
-  <div id="dot"></div>
-  <div id="clock"><div id="date"></div><div id="time">00:00</div></div>
-</div>
+<div id="screen"><div id="clock"><div id="date"></div><div id="time">00:00</div></div></div>
+<div id="black" class="off"></div>
+<div id="dot"></div>
 
 <div id="cfg">
   <h2>Configuración</h2>
 
+  <h3>Palabras clave (tuyas)</h3>
+  <input id="armk" type="text" placeholder="Palabra para ADELANTAR la hora" autocapitalize="off">
+  <small>Al decirla, se toma el número que dijo el espectador y la hora queda adelantada esos minutos. Al tocar la pantalla negra aparece la hora ya adelantada.</small>
+  <input id="rstk" type="text" placeholder="Palabra para RETROCEDER a la hora real" autocapitalize="off" style="margin-top:10px">
+  <small>Al decirla, el reloj retrocede esos minutos y queda en la hora exacta.</small>
+
+  <h3>Palabras para cada número</h3>
+  <div class="nums" id="nums"></div>
+  <small>Separa varias palabras con coma. El número en cifras (1, 2, 3…) siempre funciona.</small>
+
   <h3>Imagen de fondo</h3>
   <input id="img" type="file" accept="image/*">
-  <small>Sube la captura o el fondo de tu iPhone. Si ya trae hora dibujada, se verá doble: usa el fondo sin hora.</small>
+  <small>Sube el fondo de tu iPhone. Si ya trae hora dibujada se verá doble: usa uno sin hora.</small>
   <div class="btns"><button class="g" id="noimg">Quitar imagen</button></div>
 
   <h3>Reloj</h3>
@@ -63,27 +74,20 @@ small{color:#8e8e93;font-size:12px;display:block;margin-top:4px}
   <div class="row">Formato 24 horas <input id="h24" type="checkbox"></div>
   <div class="row">Mostrar fecha <input id="showdate" type="checkbox" checked></div>
 
-  <h3>Palabra clave de activación</h3>
-  <input id="act" type="text" placeholder="Ej: cierto (vacío = sin palabra clave)" autocapitalize="off">
-  <small>Si la escribes, el reloj solo retrocede cuando se oiga esa palabra junto al número.</small>
-
-  <h3>Palabras para cada número</h3>
-  <div class="nums" id="nums"></div>
-  <small>Separa varias palabras con coma. El número en cifras (1, 2, 3…) siempre funciona.</small>
-
   <h3>Clave de acceso</h3>
   <input id="npw" type="password" placeholder="Nueva clave (vacío = no cambiar)" autocomplete="off">
 
+  <div class="btns"><button class="g" id="mic">Reiniciar micrófono</button></div>
   <div class="btns"><button class="g" id="close">Cancelar</button><button id="save">Guardar</button></div>
 </div>
 
 <script>
 const $=id=>document.getElementById(id);
-const DEF={size:96,top:12,color:'#ffffff',h24:false,showdate:true,act:'',
+const DEF={size:96,top:12,color:'#ffffff',h24:false,showdate:true,armk:'observa',rstk:'perfecto',
  words:['uno,una','dos','tres','cuatro','cinco','seis','siete','ocho','nueve','diez']};
 let cfg=Object.assign({},DEF), offset=0, rec=null, listening=false, busy=false;
+let lastNum=0, armed=0, isBlack=true;   // offset negativo = hora adelantada
 
-// ---- Almacenamiento ----
 function load(k){try{return localStorage.getItem(k)}catch(e){return window['_'+k]}}
 function store(k,v){try{localStorage.setItem(k,v)}catch(e){window['_'+k]=v}}
 try{Object.assign(cfg,JSON.parse(load('rm_cfg')||'{}'))}catch(e){}
@@ -106,7 +110,10 @@ $('go').onclick=()=>{
   if(!load('rm_key')){store('rm_key',v);enter();return}
   if(v===load('rm_key'))enter(); else{$('err').textContent='Clave incorrecta';$('pw').value=''}
 };
-function enter(){$('login').style.display='none';$('screen').style.display='block';apply()}
+function enter(){
+  $('login').style.display='none';$('screen').style.display='block';
+  $('black').className='';isBlack=true;apply();startVoice();
+}
 
 // ---- Reloj ----
 function tick(){
@@ -116,56 +123,74 @@ function tick(){
   $('date').textContent=d.toLocaleDateString('es',{weekday:'long',day:'numeric',month:'long'});
 }
 setInterval(tick,500);
-function rewind(n){
-  if(busy)return; busy=true;
-  const start=offset,target=offset+n*60000,dur=Math.min(1500+n*500,6000),t0=performance.now();
+function rewind(){
+  if(busy||offset>=0)return; busy=true;
+  const start=offset,dur=Math.min(1500+(-start/60000)*500,6000),t0=performance.now();
   (function step(now){
     const p=Math.min((now-t0)/dur,1),e=1-Math.pow(1-p,3);
-    offset=start+(target-start)*e;tick();
-    if(p<1)requestAnimationFrame(step);else{offset=target;tick();busy=false}
+    offset=start*(1-e);tick();
+    if(p<1)requestAnimationFrame(step);else{offset=0;tick();busy=false}
   })(t0);
 }
 
 // ---- Voz ----
 const norm=s=>s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
-function parse(t){
-  t=norm(t);
-  if(cfg.act&&norm(cfg.act)&&!t.includes(norm(cfg.act)))return null;
+const esc=s=>s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+function parseNum(t){
   let best=null,bi=-1;
   const test=(re,n)=>{let m,r=new RegExp(re,'g');while((m=r.exec(t))){if(m.index>=bi){bi=m.index;best=n}}};
   for(let n=1;n<=10;n++){
     test('\\b'+n+'\\b',n);
-    (cfg.words[n-1]||'').split(',').map(norm).filter(Boolean).forEach(w=>test('\\b'+w.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\b',n));
+    (cfg.words[n-1]||'').split(',').map(norm).filter(Boolean).forEach(w=>test('\\b'+esc(w)+'\\b',n));
   }
   return best;
+}
+function handle(raw){
+  const t=norm(raw);
+  const n=parseNum(t); if(n)lastNum=n;
+  const a=norm(cfg.armk),r=norm(cfg.rstk);
+  if(isBlack&&a&&t.includes(a)&&lastNum)armed=lastNum;           // adelantar (queda listo bajo la pantalla negra)
+  if(r&&t.includes(r)){ if(isBlack){armed=0;lastNum=0} else rewind(); } // retroceder a la hora real
 }
 function startVoice(){
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   if(!SR){alert('Este navegador no soporta voz. Usa Safari o Chrome.');return}
-  rec=new SR();rec.lang='es-ES';rec.continuous=true;rec.interimResults=false;
-  rec.onresult=e=>{const n=parse(e.results[e.results.length-1][0].transcript);if(n)rewind(n)};
+  try{rec&&(listening=false,rec.stop())}catch(e){}
+  rec=new SR();rec.lang='es-ES';rec.continuous=true;rec.interimResults=true;
+  rec.onresult=e=>{for(let i=e.resultIndex;i<e.results.length;i++)handle(e.results[i][0].transcript)};
   rec.onend=()=>{if(listening){try{rec.start()}catch(e){}}};
   listening=true;try{rec.start()}catch(e){}$('dot').classList.add('on');
 }
-function stopVoice(){listening=false;try{rec.stop()}catch(e){}$('dot').classList.remove('on')}
 
-// ---- Gestos ocultos ----
-let taps=[],hold;
+// ---- Toques ----
+let hold,lastTap=0;
+function reveal(){
+  if(!isBlack)return;
+  offset=armed?-armed*60000:0;      // hora adelantada
+  tick();isBlack=false;$('black').className='off';
+}
+function toBlack(){
+  offset=0;armed=0;lastNum=0;isBlack=true;busy=false;$('black').className='';
+}
+$('black').addEventListener('click',reveal);
 $('screen').addEventListener('click',()=>{
-  const n=Date.now();taps=taps.filter(t=>n-t<700);taps.push(n);
-  if(taps.length===3){taps=[];listening?stopVoice():startVoice()}
+  const n=Date.now();
+  if(n-lastTap<350){lastTap=0;toBlack()}else lastTap=n;   // doble toque en el reloj: volver a pantalla negra
 });
-$('screen').addEventListener('dblclick',()=>{offset=0;tick()});
-$('screen').addEventListener('touchstart',()=>{hold=setTimeout(openCfg,1500)});
-$('screen').addEventListener('touchend',()=>clearTimeout(hold));
-$('screen').addEventListener('touchmove',()=>clearTimeout(hold));
+function startHold(){hold=setTimeout(openCfg,1500)}
+['black','screen'].forEach(id=>{
+  $(id).addEventListener('touchstart',startHold);
+  $(id).addEventListener('touchend',()=>clearTimeout(hold));
+  $(id).addEventListener('touchmove',()=>clearTimeout(hold));
+});
 
-// ---- Configuración ----
+// ---- Configuración (mantener presionado 1,5 s) ----
 const nums=$('nums');
 for(let i=1;i<=10;i++){nums.insertAdjacentHTML('beforeend','<span>'+i+'</span><input type="text" id="w'+i+'" autocapitalize="off">')}
 function openCfg(){
   $('size').value=cfg.size;$('top').value=cfg.top;$('color').value=cfg.color;
-  $('h24').checked=cfg.h24;$('showdate').checked=cfg.showdate;$('act').value=cfg.act;
+  $('h24').checked=cfg.h24;$('showdate').checked=cfg.showdate;
+  $('armk').value=cfg.armk;$('rstk').value=cfg.rstk;
   for(let i=1;i<=10;i++)$('w'+i).value=cfg.words[i-1]||'';
   $('npw').value='';$('cfg').style.display='block';
 }
@@ -182,9 +207,11 @@ $('img').onchange=e=>{
   r.readAsDataURL(f);
 };
 $('noimg').onclick=()=>{try{localStorage.removeItem('rm_img')}catch(e){window._rm_img=''}apply()};
+$('mic').onclick=()=>startVoice();
 $('save').onclick=()=>{
   cfg.size=+$('size').value;cfg.top=+$('top').value;cfg.color=$('color').value;
-  cfg.h24=$('h24').checked;cfg.showdate=$('showdate').checked;cfg.act=$('act').value.trim();
+  cfg.h24=$('h24').checked;cfg.showdate=$('showdate').checked;
+  cfg.armk=$('armk').value.trim();cfg.rstk=$('rstk').value.trim();
   cfg.words=[];for(let i=1;i<=10;i++)cfg.words.push($('w'+i).value);
   store('rm_cfg',JSON.stringify(cfg));
   const k=$('npw').value.trim();if(k)store('rm_key',k);
