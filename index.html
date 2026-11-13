@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Reloj">
+<title>Reloj Mental</title>
+<style>
+:root{color-scheme:dark}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;background:#000;font-family:-apple-system,"SF Pro Display",Helvetica,Arial,sans-serif;color:#fff;overflow:hidden;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+#login{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:#111;z-index:5;padding:24px;text-align:center}
+#login h1{font-size:22px;margin:0}
+#login p{margin:0;color:#aaa;font-size:14px}
+input[type=password],input[type=text],input[type=number]{font-size:17px;padding:10px 12px;border-radius:10px;border:0;background:#2a2a2c;color:#fff;width:100%}
+#pw{width:200px;text-align:center;font-size:20px}
+button{font-size:16px;padding:11px 24px;border:0;border-radius:12px;background:#0a84ff;color:#fff}
+button.g{background:#3a3a3c}
+#err{color:#ff453a;min-height:18px;font-size:14px}
+#screen{position:fixed;inset:0;display:none;text-align:center;background:linear-gradient(160deg,#1b2a6b 0%,#6a3a9c 45%,#e8708a 80%,#ffb36b 100%) center/cover no-repeat}
+#clock{position:absolute;left:0;right:0;top:12%}
+#date{font-size:20px;font-weight:600;opacity:.92;text-transform:capitalize}
+#time{font-size:96px;font-weight:700;letter-spacing:-2px;line-height:1.05}
+#dot{position:absolute;top:calc(env(safe-area-inset-top,0px) + 8px);right:12px;width:6px;height:6px;border-radius:50%;background:#fff;opacity:0}
+#dot.on{opacity:.12}
+#cfg{position:fixed;inset:0;display:none;z-index:6;background:#111;overflow-y:auto;padding:calc(env(safe-area-inset-top,0px) + 18px) 18px 40px;-webkit-user-select:text;user-select:text}
+#cfg h2{margin:0 0 14px;font-size:20px}
+#cfg h3{margin:22px 0 8px;font-size:14px;color:#8e8e93;text-transform:uppercase;letter-spacing:.5px}
+.row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:8px 0;font-size:15px}
+.row input[type=range]{width:55%}
+.nums{display:grid;grid-template-columns:34px 1fr;gap:6px 8px;align-items:center}
+.nums span{font-weight:600;text-align:center}
+small{color:#8e8e93;font-size:12px;display:block;margin-top:4px}
+.btns{display:flex;gap:10px;margin-top:22px}
+.btns button{flex:1}
+</style></head><body>
+
+<div id="login">
+  <h1 id="lt">Reloj Mental</h1>
+  <p id="lp">Ingresa tu clave</p>
+  <input id="pw" type="password" autocomplete="off">
+  <div id="err"></div>
+  <button id="go">Entrar</button>
+</div>
+
+<div id="screen">
+  <div id="dot"></div>
+  <div id="clock"><div id="date"></div><div id="time">00:00</div></div>
+</div>
+
+<div id="cfg">
+  <h2>Configuración</h2>
+
+  <h3>Imagen de fondo</h3>
+  <input id="img" type="file" accept="image/*">
+  <small>Sube la captura o el fondo de tu iPhone. Si ya trae hora dibujada, se verá doble: usa el fondo sin hora.</small>
+  <div class="btns"><button class="g" id="noimg">Quitar imagen</button></div>
+
+  <h3>Reloj</h3>
+  <div class="row">Tamaño de la hora <input id="size" type="range" min="50" max="160" value="96"></div>
+  <div class="row">Posición vertical <input id="top" type="range" min="2" max="80" value="12"></div>
+  <div class="row">Color <input id="color" type="color" value="#ffffff"></div>
+  <div class="row">Formato 24 horas <input id="h24" type="checkbox"></div>
+  <div class="row">Mostrar fecha <input id="showdate" type="checkbox" checked></div>
+
+  <h3>Palabra clave de activación</h3>
+  <input id="act" type="text" placeholder="Ej: cierto (vacío = sin palabra clave)" autocapitalize="off">
+  <small>Si la escribes, el reloj solo retrocede cuando se oiga esa palabra junto al número.</small>
+
+  <h3>Palabras para cada número</h3>
+  <div class="nums" id="nums"></div>
+  <small>Separa varias palabras con coma. El número en cifras (1, 2, 3…) siempre funciona.</small>
+
+  <h3>Clave de acceso</h3>
+  <input id="npw" type="password" placeholder="Nueva clave (vacío = no cambiar)" autocomplete="off">
+
+  <div class="btns"><button class="g" id="close">Cancelar</button><button id="save">Guardar</button></div>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+const DEF={size:96,top:12,color:'#ffffff',h24:false,showdate:true,act:'',
+ words:['uno,una','dos','tres','cuatro','cinco','seis','siete','ocho','nueve','diez']};
+let cfg=Object.assign({},DEF), offset=0, rec=null, listening=false, busy=false;
+
+// ---- Almacenamiento ----
+function load(k){try{return localStorage.getItem(k)}catch(e){return window['_'+k]}}
+function store(k,v){try{localStorage.setItem(k,v)}catch(e){window['_'+k]=v}}
+try{Object.assign(cfg,JSON.parse(load('rm_cfg')||'{}'))}catch(e){}
+
+function apply(){
+  $('time').style.fontSize=cfg.size+'px';
+  $('time').style.color=$('date').style.color=cfg.color;
+  $('clock').style.top=cfg.top+'%';
+  $('date').style.display=cfg.showdate?'block':'none';
+  const im=load('rm_img');
+  $('screen').style.backgroundImage=im?'url('+im+')':'';
+  tick();
+}
+
+// ---- Login ----
+if(!load('rm_key')){$('lt').textContent='Crear clave';$('lp').textContent='Elige tu clave de acceso';$('go').textContent='Guardar'}
+$('go').onclick=()=>{
+  const v=$('pw').value.trim();
+  if(!v){$('err').textContent='Escribe una clave';return}
+  if(!load('rm_key')){store('rm_key',v);enter();return}
+  if(v===load('rm_key'))enter(); else{$('err').textContent='Clave incorrecta';$('pw').value=''}
+};
+function enter(){$('login').style.display='none';$('screen').style.display='block';apply()}
+
+// ---- Reloj ----
+function tick(){
+  const d=new Date(Date.now()-offset);
+  let h=d.getHours(); if(!cfg.h24){h=h%12||12}
+  $('time').textContent=h+':'+String(d.getMinutes()).padStart(2,'0');
+  $('date').textContent=d.toLocaleDateString('es',{weekday:'long',day:'numeric',month:'long'});
+}
+setInterval(tick,500);
+function rewind(n){
+  if(busy)return; busy=true;
+  const start=offset,target=offset+n*60000,dur=Math.min(1500+n*500,6000),t0=performance.now();
+  (function step(now){
+    const p=Math.min((now-t0)/dur,1),e=1-Math.pow(1-p,3);
+    offset=start+(target-start)*e;tick();
+    if(p<1)requestAnimationFrame(step);else{offset=target;tick();busy=false}
+  })(t0);
+}
+
+// ---- Voz ----
+const norm=s=>s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
+function parse(t){
+  t=norm(t);
+  if(cfg.act&&norm(cfg.act)&&!t.includes(norm(cfg.act)))return null;
+  let best=null,bi=-1;
+  const test=(re,n)=>{let m,r=new RegExp(re,'g');while((m=r.exec(t))){if(m.index>=bi){bi=m.index;best=n}}};
+  for(let n=1;n<=10;n++){
+    test('\\b'+n+'\\b',n);
+    (cfg.words[n-1]||'').split(',').map(norm).filter(Boolean).forEach(w=>test('\\b'+w.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\b',n));
+  }
+  return best;
+}
+function startVoice(){
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){alert('Este navegador no soporta voz. Usa Safari o Chrome.');return}
+  rec=new SR();rec.lang='es-ES';rec.continuous=true;rec.interimResults=false;
+  rec.onresult=e=>{const n=parse(e.results[e.results.length-1][0].transcript);if(n)rewind(n)};
+  rec.onend=()=>{if(listening){try{rec.start()}catch(e){}}};
+  listening=true;try{rec.start()}catch(e){}$('dot').classList.add('on');
+}
+function stopVoice(){listening=false;try{rec.stop()}catch(e){}$('dot').classList.remove('on')}
+
+// ---- Gestos ocultos ----
+let taps=[],hold;
+$('screen').addEventListener('click',()=>{
+  const n=Date.now();taps=taps.filter(t=>n-t<700);taps.push(n);
+  if(taps.length===3){taps=[];listening?stopVoice():startVoice()}
+});
+$('screen').addEventListener('dblclick',()=>{offset=0;tick()});
+$('screen').addEventListener('touchstart',()=>{hold=setTimeout(openCfg,1500)});
+$('screen').addEventListener('touchend',()=>clearTimeout(hold));
+$('screen').addEventListener('touchmove',()=>clearTimeout(hold));
+
+// ---- Configuración ----
+const nums=$('nums');
+for(let i=1;i<=10;i++){nums.insertAdjacentHTML('beforeend','<span>'+i+'</span><input type="text" id="w'+i+'" autocapitalize="off">')}
+function openCfg(){
+  $('size').value=cfg.size;$('top').value=cfg.top;$('color').value=cfg.color;
+  $('h24').checked=cfg.h24;$('showdate').checked=cfg.showdate;$('act').value=cfg.act;
+  for(let i=1;i<=10;i++)$('w'+i).value=cfg.words[i-1]||'';
+  $('npw').value='';$('cfg').style.display='block';
+}
+['size','top','color'].forEach(id=>$(id).addEventListener('input',()=>{
+  cfg.size=+$('size').value;cfg.top=+$('top').value;cfg.color=$('color').value;apply()}));
+$('img').onchange=e=>{
+  const f=e.target.files[0];if(!f)return;
+  const r=new FileReader();
+  r.onload=()=>{const im=new Image();im.onload=()=>{
+    const s=Math.min(1,1200/im.width),c=document.createElement('canvas');
+    c.width=im.width*s;c.height=im.height*s;c.getContext('2d').drawImage(im,0,0,c.width,c.height);
+    store('rm_img',c.toDataURL('image/jpeg',.85));apply();
+  };im.src=r.result};
+  r.readAsDataURL(f);
+};
+$('noimg').onclick=()=>{try{localStorage.removeItem('rm_img')}catch(e){window._rm_img=''}apply()};
+$('save').onclick=()=>{
+  cfg.size=+$('size').value;cfg.top=+$('top').value;cfg.color=$('color').value;
+  cfg.h24=$('h24').checked;cfg.showdate=$('showdate').checked;cfg.act=$('act').value.trim();
+  cfg.words=[];for(let i=1;i<=10;i++)cfg.words.push($('w'+i).value);
+  store('rm_cfg',JSON.stringify(cfg));
+  const k=$('npw').value.trim();if(k)store('rm_key',k);
+  $('cfg').style.display='none';apply();
+};
+$('close').onclick=()=>{try{Object.assign(cfg,DEF,JSON.parse(load('rm_cfg')||'{}'))}catch(e){}$('cfg').style.display='none';apply()};
+</script></body></html>
