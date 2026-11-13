@@ -24,6 +24,9 @@ button.g{background:#3a3a3c}
 #black{position:fixed;inset:0;background:#000;z-index:4;transition:opacity .35s}
 #black.off{opacity:0;pointer-events:none}
 #dot{position:fixed;top:calc(env(safe-area-inset-top,0px) + 10px);right:14px;width:8px;height:8px;border-radius:50%;background:#555;opacity:.7;z-index:5;pointer-events:none;transition:background .15s}
+html,body{touch-action:manipulation}
+#cnt{position:fixed;bottom:calc(env(safe-area-inset-bottom,0px) + 14px);left:0;right:0;text-align:center;font-size:16px;color:#3c3c3e;z-index:5;pointer-events:none}
+select{font-size:16px;padding:8px;border-radius:10px;border:0;background:#2a2a2c;color:#fff}
 #cfg{position:fixed;inset:0;display:none;z-index:8;background:#111;overflow-y:auto;padding:calc(env(safe-area-inset-top,0px) + 18px) 18px 40px;-webkit-user-select:text;user-select:text}
 #cfg h2{margin:0 0 14px;font-size:20px}
 #cfg h3{margin:22px 0 8px;font-size:14px;color:#8e8e93;text-transform:uppercase;letter-spacing:.5px}
@@ -47,9 +50,14 @@ small{color:#8e8e93;font-size:12px;display:block;margin-top:4px}
 <div id="screen"><div id="clock"><div id="date"></div><div id="time">00:00</div></div></div>
 <div id="black" class="off"></div>
 <div id="dot"></div>
+<div id="cnt"></div>
 
 <div id="cfg">
   <h2>Configuración</h2>
+
+  <h3>Modo</h3>
+  <div class="row">Cómo recibir el minuto <select id="mode"><option value="voz">Voz (micrófono)</option><option value="toques">Toques (sin micrófono)</option></select></div>
+  <small style="line-height:1.5">Toques, con la pantalla negra: lado derecho = +1 · esquina inferior izquierda = −1 · el resto del lado izquierdo = mostrar la hora. Con la hora ya visible, un toque en cualquier parte la hace retroceder. El número aparece muy tenue abajo al centro.</small>
 
   <h3>Puntito de estado (arriba a la derecha)</h3>
   <small style="font-size:14px;line-height:1.6">
@@ -88,10 +96,10 @@ small{color:#8e8e93;font-size:12px;display:block;margin-top:4px}
 
 <script>
 const $=id=>document.getElementById(id);
-const DEF={size:96,top:12,color:'#ffffff',h24:false,showdate:true,armk:'observa',rstk:'perfecto',
+const DEF={mode:'voz',size:96,top:12,color:'#ffffff',h24:false,showdate:true,armk:'observa',rstk:'perfecto',
  words:['uno,una','dos','tres','cuatro','cinco','seis','siete','ocho','nueve','diez']};
 let cfg=Object.assign({},DEF), offset=0, rec=null, listening=false, busy=false;
-let lastNum=0, armed=0, pending=false, isBlack=true, revealedAt=0, heard='', flash='', flashT;
+let count=0, suppress=0, lastNum=0, armed=0, pending=false, isBlack=true, revealedAt=0, heard='', flash='', flashT;
 
 function load(k){try{return localStorage.getItem(k)}catch(e){return window['_'+k]}}
 function store(k,v){try{localStorage.setItem(k,v)}catch(e){window['_'+k]=v}}
@@ -110,7 +118,7 @@ function apply(){
 // ---- Puntito de estado ----
 function setDot(){
   let c='#666';
-  if(!listening)c='#1c1c1e';
+  if(cfg.mode==='voz'&&!listening)c='#1c1c1e';
   else if(flash)c=flash;
   else if(armed)c='#30d158';        // verde
   else if(pending)c='#ff453a';      // rojo
@@ -131,7 +139,7 @@ $('go').onclick=()=>{
 $('pw').addEventListener('keydown',e=>{if(e.key==='Enter')$('go').click()});
 function enter(){
   $('login').style.display='none';$('screen').style.display='block';
-  $('black').className='';isBlack=true;apply();startVoice();
+  $('black').className='';isBlack=true;apply();if(cfg.mode==='voz')startVoice();updCnt();setDot();
 }
 
 // ---- Reloj ----
@@ -217,13 +225,25 @@ function reveal(){
   const m=armed||lastNum;                  // si falló la palabra, usa el último minuto oído
   offset=m?-m*60000:0;                     // hora adelantada
   revealedAt=Date.now();pending=false;
-  tick();isBlack=false;$('black').className='off';setDot();
+  tick();isBlack=false;$('black').className='off';updCnt();setDot();
 }
 function toBlack(){
-  offset=0;armed=0;lastNum=0;pending=false;isBlack=true;busy=false;$('black').className='';setDot();
+  offset=0;armed=0;lastNum=0;count=0;pending=false;isBlack=true;busy=false;$('black').className='';updCnt();setDot();
 }
-$('black').addEventListener('click',reveal);
+function bump(d){count=Math.max(0,Math.min(10,count+d));armed=count;lastNum=count;updCnt();setDot()}
+function updCnt(){$('cnt').textContent=(cfg.mode==='toques'&&isBlack)?count:''}
+function stopVoice(){try{listening=false;if(rec){rec.onend=null;rec.stop()}}catch(e){}setDot()}
+$('black').addEventListener('click',e=>{
+  if(Date.now()-suppress<800)return;
+  if(cfg.mode!=='toques'){reveal();return}
+  const w=innerWidth,h=innerHeight,x=e.clientX,y=e.clientY;
+  if(x>w/2)bump(1);                          // lado derecho: sumar
+  else if(x<w*0.3&&y>h*0.82)bump(-1);        // esquina inferior izquierda: restar
+  else reveal();                             // resto del lado izquierdo: mostrar la hora
+});
 $('screen').addEventListener('click',()=>{
+  if(Date.now()-suppress<800)return;
+  if(cfg.mode==='toques'&&offset<0&&!busy){rewind();flashDot('#0a84ff',1800);return}   // un toque: retroceder
   const n=Date.now();
   if(n-lastTap<350){lastTap=0;toBlack()}else lastTap=n;   // doble toque en el reloj: volver a negro
 });
@@ -242,6 +262,7 @@ function openCfg(){
   $('h24').checked=cfg.h24;$('showdate').checked=cfg.showdate;
   $('armk').value=cfg.armk;$('rstk').value=cfg.rstk;
   for(let i=1;i<=10;i++)$('w'+i).value=cfg.words[i-1]||'';
+  $('mode').value=cfg.mode;suppress=Date.now();
   $('npw').value='';$('cfg').style.display='block';
 }
 setInterval(()=>{const s=$('stat');if(s)s.textContent='Micrófono: '+(listening?'encendido':'apagado')+' · Última frase: "'+heard+'" · Minuto detectado: '+(lastNum||'ninguno')+' · Adelanto listo: '+(armed||'no')},500);
@@ -262,10 +283,12 @@ $('mic').onclick=()=>startVoice();
 $('save').onclick=()=>{
   cfg.size=+$('size').value;cfg.top=+$('top').value;cfg.color=$('color').value;
   cfg.h24=$('h24').checked;cfg.showdate=$('showdate').checked;
-  cfg.armk=$('armk').value.trim();cfg.rstk=$('rstk').value.trim();
+  cfg.armk=$('armk').value.trim();cfg.rstk=$('rstk').value.trim();cfg.mode=$('mode').value;
   cfg.words=[];for(let i=1;i<=10;i++)cfg.words.push($('w'+i).value);
   store('rm_cfg',JSON.stringify(cfg));
   const k=$('npw').value.trim();if(k)store('rm_key',k);
+  if(cfg.mode==='voz'){if(!listening)startVoice()}else stopVoice();
+  suppress=Date.now();updCnt();setDot();
   $('cfg').style.display='none';apply();
 };
 $('close').onclick=()=>{try{Object.assign(cfg,DEF,JSON.parse(load('rm_cfg')||'{}'))}catch(e){}$('cfg').style.display='none';apply()};
