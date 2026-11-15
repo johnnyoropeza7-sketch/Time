@@ -177,6 +177,10 @@ function sfxClick(){                                   // clic seco
   if(!cfg.snd||!audio())return;const t=AC.currentTime;
   noise(t,.012,'highpass',2500,.7,.9);tone(t,.018,'square',1900,700,.25);tone(t,.05,'sine',180,90,.35);
 }
+function sfxTick(){                                   // tuk: un pitico por minuto que retrocede
+  if(!cfg.snd||!audio())return;const t=AC.currentTime;
+  tone(t,.09,'square',1500,1150,.28);tone(t,.05,'sine',2300,1800,.2);noise(t,.012,'highpass',3000,.8,.5);
+}
 function sfxCrack(){                                   // vidrio que se quiebra
   if(!cfg.snd||!audio())return;const t=AC.currentTime;
   noise(t,.07,'highpass',3500,.8,1);noise(t,.16,'bandpass',5200,3,.7,1800);tone(t,.14,'sine',130,45,.6);
@@ -231,9 +235,12 @@ setInterval(tick,500);
 function rewind(){
   if(busy||offset>=0)return; cancelAuto();busy=true;revealedAt=0;
   const start=offset,dur=Math.min(1500+(-start/60000)*500,6000),t0=performance.now();
+  let left=Math.ceil(-start/60000-1e-6);
   (function step(now){
-    const p=Math.min((now-t0)/dur,1),e=1-Math.pow(1-p,3);
+    const p=Math.min((now-t0)/dur,1),e=p;                  // lineal: los tuk salen parejos
     offset=start*(1-e);tick();
+    const rem=Math.max(0,Math.ceil(-offset/60000-1e-6));
+    while(left>rem){left--;sfxTick()}                     // un tuk por cada minuto
     if(p<1)requestAnimationFrame(step);else{offset=0;tick();busy=false}
   })(t0);
 }
